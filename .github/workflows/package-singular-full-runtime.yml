@@ -1,0 +1,59 @@
+name: Package complete Singular runtime
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/package-singular-full-runtime.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Singular
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y singular
+          Singular --version | tee singular-version.txt
+      - name: Bundle executable libraries data and modules
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p bundle/bin bundle/lib bundle/share bundle/modules
+          cp -a /usr/bin/Singular bundle/bin/
+          cp -a /usr/share/singular bundle/share/ 2>/dev/null || true
+          find /usr/lib /usr/libexec -type f \( -name '*.so' -o -name '*.so.*' \) -path '*singular*' -print > singular-modules.txt || true
+          while read -r f; do [ -n "$f" ] && cp -L --parents "$f" bundle/modules/; done < singular-modules.txt
+          ldd /usr/bin/Singular | awk '/=> \/|^\// {for(i=1;i<=NF;i++) if($i ~ /^\//) print $i}' | sort -u > singular-ldd.txt
+          while read -r lib; do
+            case "$lib" in
+              */libc.so.6|*/libm.so.6|*/libgcc_s.so.1|*/libstdc++.so.6|*/libtinfo.so.6|*/libreadline.so.8|*/libgmp.so.10|*/libmpfr.so.6) ;;
+              *) cp -L --parents "$lib" bundle/lib/ ;;
+            esac
+          done < singular-ldd.txt
+          cat > bundle/run-Singular <<'SH'
+          #!/usr/bin/env bash
+          ROOT=$(cd "$(dirname "$0")" && pwd)
+          export LD_LIBRARY_PATH="$ROOT/lib/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+          export SINGULARPATH="$ROOT/share/singular/LIB:$ROOT/share/singular:$ROOT/modules/usr/lib/x86_64-linux-gnu/singular:$ROOT/modules/usr/libexec/x86_64-linux-gnu/singular:${SINGULARPATH:-}"
+          exec "$ROOT/bin/Singular" "$@"
+          SH
+          chmod +x bundle/run-Singular
+          tar -czf singular-full-runtime-ubuntu24-amd64.tar.gz -C bundle .
+          sha256sum singular-full-runtime-ubuntu24-amd64.tar.gz > singular-full-runtime.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: singular-full-runtime-ubuntu24-amd64
+          path: |
+            singular-full-runtime-ubuntu24-amd64.tar.gz
+            singular-full-runtime.sha256
+            singular-version.txt
+            singular-ldd.txt
+            singular-modules.txt
+          retention-days: 7

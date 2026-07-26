@@ -1,0 +1,56 @@
+// Exact modular fixed-mass common-component test for the strict regular
+// reflection-symmetric five-body family. Replace __CHAR__ by an odd prime.
+//
+// A fixed-mass curve in the physical strict-regular chart must lie in the
+// saturated algebraic set P=Q=J=RP=RQ=0 below. Thus a zero-dimensional
+// result at one good prime rules out a characteristic-zero contracted curve
+// in this chart. A positive-dimensional result is only a candidate.
+option(redSB);
+ring R=__CHAR__,(x,z,B,C,e),dp;
+
+poly Sn=x^2-z^2;
+poly Sd=4*x^2*z^2;
+poly Yn=-(2*x*z-x-z)*(2*x*z-x+z)*(2*x*z+x-z)*(2*x*z+x+z);
+poly u=x^3;
+poly v=z^3;
+poly Nbar=4*B*Sn^3*(u+v)-B*Sd^3+4*Sn^2*Sd*(u-v);
+poly Kd=4*B*Sn^4*(u-v)-4*B*Sn^3*Sd*(u+v)+B*Sd^4
+        +4*Sn^3*Sd*(u+v)-Sn^3*Sd-4*Sn^2*Sd^2*(u-v);
+poly Kn=Sd*Nbar;
+poly Lbar=B*Kd+(B+1)*Kn;
+poly Ebar=Sn*(u-v)-Sd*(u+v);
+poly K0t=-Nbar*Sd-4*B*(u+v)*Kd+4*B*Nbar*Ebar;
+poly Rbar=2*B*(Kd+Kn)*Kd-C*Sn^3*Sd*K0t;
+poly Qt=-2*Nbar*Kd-C*Sn^3*K0t;
+poly Dent=8*C*Sn^3*Lbar;
+poly MRt=Kd^2+Nbar^2*Yn;
+poly MQbar=Sn^2*Kd^2+(Kd+Kn)^2*Yn;
+
+poly P=Rbar^2*MRt^3-Sd^2*Dent^2*Kd^6;
+poly Q=Qt^2*MQbar^3-Sd^6*Dent^2*Kd^6;
+poly Px=diff(P,x); poly Pz=diff(P,z);
+poly Qx=diff(Q,x); poly Qz=diff(Q,z);
+poly J=Px*Qz-Pz*Qx;
+poly Jx=diff(J,x); poly Jz=diff(J,z);
+poly RP=Px*Jz-Pz*Jx;
+poly RQ=Qx*Jz-Qz*Jx;
+
+poly Delta=B*C*x*z*Sn*Yn*Nbar*Kd*Lbar*(Kd+Kn);
+ideal Contract=P,Q,J,RP,RQ,e*Delta-1;
+
+print("BEGIN_BIVARIATE_CONTRACTED");
+print("char="+string(char(R)));
+print("P_terms="+string(size(P)));
+print("Q_terms="+string(size(Q)));
+print("J_terms="+string(size(J)));
+print("RP_terms="+string(size(RP)));
+print("RQ_terms="+string(size(RQ)));
+int t0=timer;
+ideal G=std(Contract);
+print("std_seconds="+string(timer-t0));
+print("contracted_dimension="+string(dim(G)));
+print("contracted_groebner_size="+string(size(G)));
+print("LEADING_IDEAL");
+lead(G);
+print("END_BIVARIATE_CONTRACTED");
+quit;

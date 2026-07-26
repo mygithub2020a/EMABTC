@@ -1,0 +1,45 @@
+name: Temporary Singular bundle for Smale6 exact checks
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'smale6_temp/singular_bundle_marker.md'
+      - '.github/workflows/smale6-temp-singular-bundle.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install and package Singular
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y singular pax-utils
+          Singular --version | tee singular-version.txt
+          dpkg-query -W | grep -i singular | tee singular-packages.txt
+          {
+            command -v Singular
+            lddtree -l "$(command -v Singular)"
+            dpkg-query -L singular singular-ui singular-modules singular-data libsingular4m3n0t64 2>/dev/null || true
+          } | grep '^/' | sort -u > singular-files.txt
+          tar --ignore-failed-read -czf singular-ubuntu2404-rootfs.tgz -T singular-files.txt
+          sha256sum singular-ubuntu2404-rootfs.tgz > singular-ubuntu2404-rootfs.sha256
+          ls -lh singular-ubuntu2404-rootfs.tgz
+      - name: Upload Singular bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: singular-ubuntu2404-rootfs
+          path: |
+            singular-ubuntu2404-rootfs.tgz
+            singular-ubuntu2404-rootfs.sha256
+            singular-version.txt
+            singular-packages.txt
+            singular-files.txt
+          retention-days: 2

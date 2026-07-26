@@ -1,0 +1,35 @@
+name: Smale6 package current msolve
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/smale6-package-msolve.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Download official msolve 0.10.1 binary
+        run: |
+          set -euxo pipefail
+          curl -fL https://msolve.proj.lip6.fr/downloads/v0.10.1/msolve-0.10.1_linux_intel_x86.zip -o msolve.zip
+          unzip -q msolve.zip -d solver
+          MSOLVE=$(find solver -type f -name msolve | head -1)
+          chmod +x "$MSOLVE"
+          "$MSOLVE" -V | tee msolve-version.txt
+          sha256sum msolve.zip > msolve.zip.sha256
+      - name: Upload portable official binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: msolve-0.10.1-linux-intel
+          path: |
+            msolve.zip
+            msolve.zip.sha256
+            msolve-version.txt
+          retention-days: 7

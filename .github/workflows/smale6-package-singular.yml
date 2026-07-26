@@ -1,0 +1,54 @@
+name: Smale6 package Singular runtime
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/smale6-package-singular.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Singular
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y singular
+          Singular --version | tee singular-version.txt
+      - name: Build relocatable runtime bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p bundle/bin bundle/lib bundle/share
+          cp -a /usr/bin/Singular bundle/bin/
+          cp -a /usr/bin/singular* bundle/bin/ 2>/dev/null || true
+          cp -a /usr/share/singular bundle/share/ 2>/dev/null || true
+          ldd /usr/bin/Singular | awk '/=> \/|^\// {for(i=1;i<=NF;i++) if($i ~ /^\//) print $i}' | sort -u > singular-ldd.txt
+          while read -r lib; do cp -L --parents "$lib" bundle/lib/; done < singular-ldd.txt
+          cat > bundle/run-Singular <<'SH'
+          #!/usr/bin/env bash
+          ROOT=$(cd "$(dirname "$0")" && pwd)
+          export LD_LIBRARY_PATH="$ROOT/lib/usr/lib/x86_64-linux-gnu:$ROOT/lib/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+          export SINGULARPATH="$ROOT/share/singular/LIB:$ROOT/share/singular:${SINGULARPATH:-}"
+          exec "$ROOT/bin/Singular" "$@"
+          SH
+          chmod +x bundle/run-Singular
+          tar -czf singular-runtime-ubuntu24-amd64.tar.gz -C bundle .
+          sha256sum singular-runtime-ubuntu24-amd64.tar.gz > singular-runtime.sha256
+      - name: Upload runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: singular-runtime-ubuntu24-amd64
+          path: |
+            singular-runtime-ubuntu24-amd64.tar.gz
+            singular-runtime.sha256
+            singular-version.txt
+            singular-ldd.txt
+          retention-days: 7

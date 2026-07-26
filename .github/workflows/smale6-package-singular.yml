@@ -1,0 +1,70 @@
+name: Smale6 package Singular CAS
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/smale6-package-singular.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Install and smoke-test Singular
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y singular
+          Singular --version | tee singular-version.txt
+          cat > /tmp/smoke.sing <<'EOF'
+          LIB "grobcov.lib";
+          ring r=0,(x,y),dp;
+          ideal I=x2-y,y2-x;
+          print(dim(std(I)));
+          print("PORTABLE_SINGULAR_OK");
+          quit;
+          EOF
+          Singular -q /tmp/smoke.sing | tee singular-smoke.txt
+          grep -q PORTABLE_SINGULAR_OK singular-smoke.txt
+      - name: Bundle executable, dependencies, and library tree
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ROOT="$PWD/portable-singular/root"
+          mkdir -p "$ROOT"
+          cp --parents /usr/bin/Singular "$ROOT"
+          if [ -e /usr/bin/ESingular ]; then cp --parents /usr/bin/ESingular "$ROOT"; fi
+          ldd /usr/bin/Singular | tee singular-ldd.txt
+          ldd /usr/bin/Singular | awk '/=> \// {print $3} /^\// {print $1}' | sort -u > singular-libs.txt
+          while read -r lib; do cp -L --parents "$lib" "$ROOT"; done < singular-libs.txt
+          for p in /usr/share/singular /usr/lib/x86_64-linux-gnu/singular /usr/lib/singular; do
+            if [ -e "$p" ]; then cp -a --parents "$p" "$ROOT"; fi
+          done
+          cat > portable-singular/run-Singular.sh <<'EOF'
+          #!/usr/bin/env bash
+          HERE="$(cd "$(dirname "$0")" && pwd)"
+          ROOT="$HERE/root"
+          export LD_LIBRARY_PATH="$ROOT/usr/lib/x86_64-linux-gnu:$ROOT/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export SINGULARPATH="$ROOT/usr/share/singular/LIB:$ROOT/usr/share/singular${SINGULARPATH:+:$SINGULARPATH}"
+          exec "$ROOT/usr/bin/Singular" "$@"
+          EOF
+          chmod +x portable-singular/run-Singular.sh
+          tar -czf portable-singular.tar.gz portable-singular
+          sha256sum portable-singular.tar.gz > portable-singular.tar.gz.sha256
+      - name: Upload portable bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-singular-ubuntu24
+          path: |
+            portable-singular.tar.gz
+            portable-singular.tar.gz.sha256
+            singular-version.txt
+            singular-smoke.txt
+            singular-ldd.txt
+            singular-libs.txt
+          retention-days: 7

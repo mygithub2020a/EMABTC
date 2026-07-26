@@ -1,0 +1,125 @@
+name: Temporary Smale6 exact second-jet msolve
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'smale6_temp/**'
+      - '.github/workflows/smale6-temp-msolve.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  tool-bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Download current msolve binary
+        run: |
+          set -euxo pipefail
+          curl -fL https://msolve.proj.lip6.fr/downloads/v0.10.1/msolve-0.10.1_linux_intel_x86.zip -o msolve.zip
+          unzip -l msolve.zip
+          sha256sum msolve.zip > msolve.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msolve-0.10.1-linux-intel
+          path: |
+            msolve.zip
+            msolve.zip.sha256
+          retention-days: 2
+
+  second-jet:
+    name: second jet p=${{ matrix.prime }} chart=${{ matrix.chart }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        prime: [61, 101]
+        chart: [s, t, w]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare exact system and current solver
+        run: |
+          set -euxo pipefail
+          python -m pip install --quiet sympy
+          python smale6_temp/generate_secondjet_msolve.py --prime '${{ matrix.prime }}' --chart '${{ matrix.chart }}' --output system.ms
+          curl -fL https://msolve.proj.lip6.fr/downloads/v0.10.1/msolve-0.10.1_linux_intel_x86.zip -o msolve.zip
+          unzip -q msolve.zip -d solver
+          find solver -type f -maxdepth 3 -print
+          MSOLVE=$(find solver -type f -name msolve | head -1)
+          chmod +x "$MSOLVE"
+          echo "MSOLVE=$MSOLVE" >> "$GITHUB_ENV"
+          "$MSOLVE" -h | head -100 | tee msolve-help.txt
+      - name: Compute exact leading ideal and dimension
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v timeout 315m "$MSOLVE" -t 4 -v 2 -g 1 -f system.ms -o result.ms > solver.stdout 2> solver.stderr
+          status=$?
+          echo "$status" > solver.status
+          cat solver.status
+          tail -n 300 solver.stdout || true
+          tail -n 300 solver.stderr || true
+          sed -n '1,300p' result.ms || true
+          exit 0
+      - name: Upload exact certificate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: secondjet-msolve-${{ matrix.prime }}-${{ matrix.chart }}
+          path: |
+            system.ms
+            result.ms
+            solver.stdout
+            solver.stderr
+            solver.status
+            msolve-help.txt
+          retention-days: 2
+
+  char0-second-jet:
+    name: characteristic-zero second jet chart=${{ matrix.chart }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        chart: [s, t, w]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare characteristic-zero system
+        run: |
+          set -euxo pipefail
+          python -m pip install --quiet sympy
+          python smale6_temp/generate_secondjet_msolve.py --prime 0 --chart '${{ matrix.chart }}' --output system.ms
+          curl -fL https://msolve.proj.lip6.fr/downloads/v0.10.1/msolve-0.10.1_linux_intel_x86.zip -o msolve.zip
+          unzip -q msolve.zip -d solver
+          MSOLVE=$(find solver -type f -name msolve | head -1)
+          chmod +x "$MSOLVE"
+          echo "MSOLVE=$MSOLVE" >> "$GITHUB_ENV"
+      - name: Compute characteristic-zero leading ideal
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v timeout 315m "$MSOLVE" -t 4 -v 2 -g 1 -f system.ms -o result.ms > solver.stdout 2> solver.stderr
+          status=$?
+          echo "$status" > solver.status
+          tail -n 300 solver.stdout || true
+          tail -n 300 solver.stderr || true
+          sed -n '1,300p' result.ms || true
+          exit 0
+      - name: Upload characteristic-zero certificate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: secondjet-msolve-char0-${{ matrix.chart }}
+          path: |
+            system.ms
+            result.ms
+            solver.stdout
+            solver.stderr
+            solver.status
+          retention-days: 2

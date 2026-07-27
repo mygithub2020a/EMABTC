@@ -1,4 +1,4 @@
-name: Temporary Smale6 mass-map second-jet msolve
+name: Temporary Smale6 reduced verticality gate
 
 on:
   pull_request:
@@ -10,56 +10,51 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: smale6-verticality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  massmap-second-jet:
-    name: exact mass-map jet p=1000003 chart=${{ matrix.chart }}
+  modular-verticality:
+    name: reduced verticality p=${{ matrix.prime }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 330
+    timeout-minutes: 115
     strategy:
       fail-fast: false
-      max-parallel: 3
+      max-parallel: 2
       matrix:
-        chart: [s, t, w]
+        prime: [101, 32003]
     steps:
       - uses: actions/checkout@v4
-      - name: Prepare exact saturated system and solver
+      - name: Install Singular and materialize exact input
         run: |
           set -euxo pipefail
-          python -m pip install --quiet sympy
-          python smale6_temp/generate_secondjet_msolve.py --prime 1000003 --chart '${{ matrix.chart }}' --output system.ms | tee generator.log
-          curl -fL https://msolve.proj.lip6.fr/downloads/v0.10.1/msolve-0.10.1_linux_intel_x86.zip -o msolve.zip
-          unzip -q msolve.zip -d solver
-          MSOLVE=$(find solver -type f -name msolve | head -1)
-          chmod +x "$MSOLVE"
-          echo "MSOLVE=$MSOLVE" >> "$GITHUB_ENV"
-          "$MSOLVE" -V | tee msolve-version.txt
-          wc -c system.ms
-      - name: Compute exact saturated leading ideal
+          sudo apt-get update
+          sudo apt-get install -y singular
+          Singular --version | tee singular-version.txt
+          sed 's/__CHAR__/${{ matrix.prime }}/g' smale6_temp/fivebody_reduced_verticality.sing > verticality_${{ matrix.prime }}.sing
+          sha256sum verticality_${{ matrix.prime }}.sing > input.sha256
+      - name: Compute exact saturated verticality ideal
         shell: bash
         run: |
           set +e
-          /usr/bin/time -v timeout 315m "$MSOLVE" \
-            -f system.ms -o result.ms -S \
-            -t 4 -v 2 -g 1 -r 0 -l 44 --random-seed 1 \
-            > solver.stdout 2> solver.stderr
+          /usr/bin/time -v timeout 100m Singular -q verticality_${{ matrix.prime }}.sing > solver.stdout 2> solver.stderr
           status=$?
           echo "$status" > solver.status
           echo "status=$status"
-          tail -n 400 solver.stdout || true
-          tail -n 400 solver.stderr || true
-          sed -n '1,400p' result.ms || true
+          tail -n 500 solver.stdout || true
+          tail -n 500 solver.stderr || true
           exit 0
-      - name: Upload exact certificate
+      - name: Upload exact computation record
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: massmap-jet2-1000003-${{ matrix.chart }}
+          name: verticality-singular-${{ matrix.prime }}
           path: |
-            system.ms
-            result.ms
+            singular-version.txt
+            verticality_${{ matrix.prime }}.sing
+            input.sha256
             solver.stdout
             solver.stderr
             solver.status
-            generator.log
-            msolve-version.txt
           retention-days: 7

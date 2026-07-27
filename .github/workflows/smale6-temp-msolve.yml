@@ -1,60 +1,116 @@
-name: Temporary Smale6 reduced verticality gate
+name: Temporary Smale6 round4 mass-map jet gates
 
 on:
   pull_request:
     branches: [master]
     paths:
-      - 'smale6_temp/**'
+      - 'smale6_round4/**'
       - '.github/workflows/smale6-temp-msolve.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: smale6-verticality-${{ github.event.pull_request.number || github.ref }}
+  group: smale6-round4-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  modular-verticality:
-    name: reduced verticality p=${{ matrix.prime }}
+  probabilistic-probe:
+    name: probe chart=${{ matrix.chart }} p=1000003
     runs-on: ubuntu-24.04
-    timeout-minutes: 115
+    timeout-minutes: 100
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 3
       matrix:
-        prime: [101, 32003]
+        chart: [W, s, p]
     steps:
       - uses: actions/checkout@v4
-      - name: Install Singular and materialize exact input
+      - name: Prepare system and msolve
+        shell: bash
         run: |
           set -euxo pipefail
-          sudo apt-get update
-          sudo apt-get install -y singular
-          Singular --version | tee singular-version.txt
-          sed 's/__CHAR__/${{ matrix.prime }}/g' smale6_temp/fivebody_reduced_verticality.sing > verticality_${{ matrix.prime }}.sing
-          sha256sum verticality_${{ matrix.prime }}.sing > input.sha256
-      - name: Compute exact saturated verticality ideal
+          python -m pip install --quiet sympy
+          python smale6_round4/generate_wp_massmap_jet_msolve.py --prime 1000003 --chart '${{ matrix.chart }}' --output probe_${{ matrix.chart }}.in > probe_${{ matrix.chart }}.meta.json
+          curl -fL https://msolve.proj.lip6.fr/downloads/v0.10.1/msolve-0.10.1_linux_intel_x86.zip -o msolve.zip
+          unzip -q msolve.zip -d solver
+          MSOLVE=$(find solver -type f -name msolve | head -1)
+          chmod +x "$MSOLVE"
+          echo "MSOLVE=$MSOLVE" >> "$GITHUB_ENV"
+          "$MSOLVE" -V | tee msolve-version.txt
+      - name: Run probabilistic native-saturation probe
         shell: bash
         run: |
           set +e
-          /usr/bin/time -v timeout 100m Singular -q verticality_${{ matrix.prime }}.sing > solver.stdout 2> solver.stderr
+          ulimit -v 6500000
+          /usr/bin/time -v timeout 85m "$MSOLVE" -S -t 2 -v 2 -g 1 -r 0 -l 44 -m 500 -u 3 -f probe_${{ matrix.chart }}.in -o probe_${{ matrix.chart }}.out > probe_${{ matrix.chart }}.stdout 2> probe_${{ matrix.chart }}.stderr
           status=$?
-          echo "$status" > solver.status
-          echo "status=$status"
-          tail -n 500 solver.stdout || true
-          tail -n 500 solver.stderr || true
+          echo "$status" > probe_${{ matrix.chart }}.status
+          tail -n 250 probe_${{ matrix.chart }}.stderr || true
+          sed -n '1,120p' probe_${{ matrix.chart }}.out || true
           exit 0
-      - name: Upload exact computation record
+      - name: Upload probe certificate
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: verticality-singular-${{ matrix.prime }}
+          name: round4-probe-${{ matrix.chart }}-1000003
           path: |
-            singular-version.txt
-            verticality_${{ matrix.prime }}.sing
-            input.sha256
-            solver.stdout
-            solver.stderr
-            solver.status
+            msolve-version.txt
+            probe_${{ matrix.chart }}.in
+            probe_${{ matrix.chart }}.meta.json
+            probe_${{ matrix.chart }}.out
+            probe_${{ matrix.chart }}.stdout
+            probe_${{ matrix.chart }}.stderr
+            probe_${{ matrix.chart }}.status
+          retention-days: 7
+
+  exact-modular:
+    name: exact chart=${{ matrix.chart }} p=${{ matrix.prime }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        prime: [1000003, 1000033]
+        chart: [W, s, p]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare exact system and msolve
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --quiet sympy
+          python smale6_round4/generate_wp_massmap_jet_msolve.py --prime '${{ matrix.prime }}' --chart '${{ matrix.chart }}' --output exact_${{ matrix.chart }}_${{ matrix.prime }}.in > exact_${{ matrix.chart }}_${{ matrix.prime }}.meta.json
+          curl -fL https://msolve.proj.lip6.fr/downloads/v0.10.1/msolve-0.10.1_linux_intel_x86.zip -o msolve.zip
+          unzip -q msolve.zip -d solver
+          MSOLVE=$(find solver -type f -name msolve | head -1)
+          chmod +x "$MSOLVE"
+          echo "MSOLVE=$MSOLVE" >> "$GITHUB_ENV"
+          "$MSOLVE" -V | tee msolve-version.txt
+      - name: Run exact native-saturation gate
+        shell: bash
+        run: |
+          set +e
+          ulimit -v 6500000
+          /usr/bin/time -v timeout 315m "$MSOLVE" -S -t 2 -v 2 -g 1 -r 0 -l 2 -m 500 -u 3 -f exact_${{ matrix.chart }}_${{ matrix.prime }}.in -o exact_${{ matrix.chart }}_${{ matrix.prime }}.out > exact_${{ matrix.chart }}_${{ matrix.prime }}.stdout 2> exact_${{ matrix.chart }}_${{ matrix.prime }}.stderr
+          status=$?
+          echo "$status" > exact_${{ matrix.chart }}_${{ matrix.prime }}.status
+          tail -n 250 exact_${{ matrix.chart }}_${{ matrix.prime }}.stderr || true
+          sed -n '1,120p' exact_${{ matrix.chart }}_${{ matrix.prime }}.out || true
+          exit 0
+      - name: Upload exact certificate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: round4-exact-${{ matrix.chart }}-${{ matrix.prime }}
+          path: |
+            msolve-version.txt
+            exact_${{ matrix.chart }}_${{ matrix.prime }}.in
+            exact_${{ matrix.chart }}_${{ matrix.prime }}.meta.json
+            exact_${{ matrix.chart }}_${{ matrix.prime }}.out
+            exact_${{ matrix.chart }}_${{ matrix.prime }}.stdout
+            exact_${{ matrix.chart }}_${{ matrix.prime }}.stderr
+            exact_${{ matrix.chart }}_${{ matrix.prime }}.status
           retention-days: 7

@@ -1,0 +1,74 @@
+name: Smale6 exact mass-eliminated second-jet gate
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'smale6_massmap/**'
+      - '.github/workflows/smale6-massmap-jet-msolve.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smale6-massmap-jet-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-massmap-jet:
+    name: massmap jet chart=${{ matrix.chart }} p=1000003
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        chart: [s, t, w]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate exact system and install official msolve
+        run: |
+          set -euxo pipefail
+          python -m pip install --quiet sympy
+          python smale6_massmap/generate_massmap_jet_msolve.py \
+            --prime 1000003 --chart '${{ matrix.chart }}' \
+            --output system_${{ matrix.chart }}.ms | tee generator.log
+          curl -fL https://msolve.proj.lip6.fr/downloads/v0.10.1/msolve-0.10.1_linux_intel_x86.zip -o msolve.zip
+          unzip -q msolve.zip -d solver
+          MSOLVE=$(find solver -type f -name msolve | head -1)
+          chmod +x "$MSOLVE"
+          echo "MSOLVE=$MSOLVE" >> "$GITHUB_ENV"
+          "$MSOLVE" -V | tee msolve-version.txt
+          sha256sum system_${{ matrix.chart }}.ms > input.sha256
+      - name: Compute exact Rabinowitsch-saturated massmap jet ideal
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v timeout 330m "$MSOLVE" \
+            -f system_${{ matrix.chart }}.ms \
+            -o result_${{ matrix.chart }}.ms \
+            -t 4 -v 2 -g 1 -r 0 -l 44 -m 50 --random-seed 1 \
+            > solver.stdout 2> solver.stderr
+          status=$?
+          echo "$status" > solver.status
+          echo "status=$status"
+          tail -n 500 solver.stdout || true
+          tail -n 500 solver.stderr || true
+          sed -n '1,500p' result_${{ matrix.chart }}.ms || true
+          exit 0
+      - name: Upload exact computation record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: massmap-jet-1000003-${{ matrix.chart }}
+          path: |
+            system_${{ matrix.chart }}.ms
+            result_${{ matrix.chart }}.ms
+            generator.log
+            input.sha256
+            msolve-version.txt
+            solver.stdout
+            solver.stderr
+            solver.status
+          retention-days: 7

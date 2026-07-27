@@ -15,14 +15,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - name: Install Singular and locate runtime modules
+      - name: Install Singular and locate only its dynamic procedure modules
         run: |
           set -euxo pipefail
           sudo apt-get update
-          sudo apt-get install -y singular
+          sudo apt-get install -y singular singular-modules
           Singular --version | tee singular-version.txt
-          dpkg -L singular | sort > singular-package-files.txt
-          find /usr/lib /usr/share/singular -type f \( -name '*.so' -o -name '*.so.*' \) 2>/dev/null | sort > singular-module-files.txt
+          dpkg -L singular-modules | sort > singular-module-files-all.txt
+          grep -E '\.so($|\.)' singular-module-files-all.txt > singular-module-files.txt
           cat singular-module-files.txt
       - name: Package modules preserving paths
         shell: bash
@@ -30,16 +30,16 @@ jobs:
           set -euxo pipefail
           mkdir module-bundle
           while read -r f; do cp -L --parents "$f" module-bundle/; done < singular-module-files.txt
-          tar -czf singular-modules-ubuntu24-amd64.tar.gz -C module-bundle .
-          sha256sum singular-modules-ubuntu24-amd64.tar.gz > singular-modules.sha256
+          tar -czf singular-procedure-modules-ubuntu24-amd64.tar.gz -C module-bundle .
+          sha256sum singular-procedure-modules-ubuntu24-amd64.tar.gz > singular-procedure-modules.sha256
       - name: Upload module bundle
         uses: actions/upload-artifact@v4
         with:
-          name: singular-modules-ubuntu24-amd64
+          name: singular-procedure-modules-ubuntu24-amd64
           path: |
-            singular-modules-ubuntu24-amd64.tar.gz
-            singular-modules.sha256
+            singular-procedure-modules-ubuntu24-amd64.tar.gz
+            singular-procedure-modules.sha256
             singular-version.txt
-            singular-package-files.txt
+            singular-module-files-all.txt
             singular-module-files.txt
           retention-days: 7

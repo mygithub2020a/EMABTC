@@ -1,0 +1,24 @@
+name: Smale6 round4 unsaturated second-jet
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'smale6_round4/**'
+      - '.github/workflows/smale6-round4-unsat.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smale6-round4-unsat-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stopped:
+    name: research run intentionally stopped
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'No background computation remains.'

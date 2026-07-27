@@ -16,51 +16,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  modular:
-    name: chart=${{ matrix.chart }} p=${{ matrix.prime }}
+  stopped:
+    name: research run intentionally stopped
+    if: ${{ false }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 330
-    strategy:
-      fail-fast: false
-      max-parallel: 6
-      matrix:
-        prime: [1000003, 1000033]
-        chart: [W, s, p]
     steps:
-      - uses: actions/checkout@v4
-      - name: Prepare solver and system
-        shell: bash
-        run: |
-          set -euxo pipefail
-          python -m pip install --quiet sympy
-          python smale6_round4/generate_wp_unsat.py --prime '${{ matrix.prime }}' --chart '${{ matrix.chart }}' --output system.ms | tee generator.txt
-          curl -fL https://msolve.proj.lip6.fr/downloads/v0.10.1/msolve-0.10.1_linux_intel_x86.zip -o msolve.zip
-          unzip -q msolve.zip -d solver
-          MSOLVE=$(find solver -type f -name msolve | head -1)
-          chmod +x "$MSOLVE"
-          echo "MSOLVE=$MSOLVE" >> "$GITHUB_ENV"
-          "$MSOLVE" -V | tee msolve-version.txt
-      - name: Compute exact finite-field dimension screen
-        shell: bash
-        run: |
-          set +e
-          /usr/bin/time -v timeout 315m "$MSOLVE" -t 2 -v 2 -g 1 -l 44 -m 50 -f system.ms -o result.ms > solver.stdout 2> solver.stderr
-          status=$?
-          echo "$status" > solver.status
-          tail -n 300 solver.stderr || true
-          sed -n '1,300p' result.ms || true
-          exit 0
-      - name: Upload exact screen
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: round4-unsat-${{ matrix.chart }}-${{ matrix.prime }}
-          path: |
-            system.ms
-            result.ms
-            solver.stdout
-            solver.stderr
-            solver.status
-            generator.txt
-            msolve-version.txt
-          retention-days: 7
+      - run: echo 'No background computation remains.'

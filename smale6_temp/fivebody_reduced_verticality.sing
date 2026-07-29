@@ -1,0 +1,66 @@
+// Exact differential-verticality gate for the regular reflection-symmetric
+// planar five-body central-configuration family.
+// Replace __CHAR__ by 0 or a prime.
+option(redSB);
+option(prot);
+ring R = __CHAR__,(s,t,w,a,b,c,d,A,C,z),dp;
+poly T=t+w; poly aa=a^3; poly u=b^3; poly v=c^3; poly h=d^3;
+poly F=4*T*(2*h-u-v)+w*(8*A*aa-A-4*s*(v-u));
+poly G=4*A*s^3*u*w+4*A*s^3*v*w-A*s^3*w
+       -4*A*s^2*t*u+4*A*s^2*t*v-4*A*s^2*u*w+4*A*s^2*v*w
+       +4*s^4*u*w-4*s^4*v*w-4*s^3*t*u-4*s^3*t*v
+       -4*s^3*u*w-4*s^3*v*w+t+w;
+poly H=4*C*T*(aa-h)-t*(A*(4*u+4*v-1)-4*s*(v-u));
+poly g1=a^2*(1+w^2)-1;
+poly g2=b^2*((1-s)^2+t^2)-1;
+poly g3=c^2*((1+s)^2+t^2)-1;
+poly g4=d^2*(s^2+T^2)-1;
+
+// Exact derivatives tangent to the inverse-distance cover.
+poly Fs=diff(F,s)+diff(F,b)*(1-s)*b^3-diff(F,c)*(1+s)*c^3-diff(F,d)*s*d^3;
+poly Ft=diff(F,t)-diff(F,b)*t*b^3-diff(F,c)*t*c^3-diff(F,d)*T*d^3;
+poly Fw=diff(F,w)-diff(F,a)*w*a^3-diff(F,d)*T*d^3;
+poly Gs=diff(G,s)+diff(G,b)*(1-s)*b^3-diff(G,c)*(1+s)*c^3-diff(G,d)*s*d^3;
+poly Gt=diff(G,t)-diff(G,b)*t*b^3-diff(G,c)*t*c^3-diff(G,d)*T*d^3;
+poly Gw=diff(G,w)-diff(G,a)*w*a^3-diff(G,d)*T*d^3;
+poly Hs=diff(H,s)+diff(H,b)*(1-s)*b^3-diff(H,c)*(1+s)*c^3-diff(H,d)*s*d^3;
+poly Ht=diff(H,t)-diff(H,b)*t*b^3-diff(H,c)*t*c^3-diff(H,d)*T*d^3;
+poly Hw=diff(H,w)-diff(H,a)*w*a^3-diff(H,d)*T*d^3;
+poly D=Fs*(Gt*Hw-Gw*Ht)-Ft*(Gs*Hw-Gw*Hs)+Fw*(Gs*Ht-Gt*Hs);
+poly Ds=diff(D,s)+diff(D,b)*(1-s)*b^3-diff(D,c)*(1+s)*c^3-diff(D,d)*s*d^3;
+poly Dt=diff(D,t)-diff(D,b)*t*b^3-diff(D,c)*t*c^3-diff(D,d)*T*d^3;
+poly Dw=diff(D,w)-diff(D,a)*w*a^3-diff(D,d)*T*d^3;
+
+// On the critical curve F=G=H=D=0, the signed maximal-cofactor tangent
+// has mass components dA and dC below.  A fixed-mass curve forces both
+// to vanish identically at every smooth point.
+matrix JA[4][4]; // delete A: columns s,t,w,C
+JA[1,1]=Fs; JA[1,2]=Ft; JA[1,3]=Fw; JA[1,4]=diff(F,C);
+JA[2,1]=Gs; JA[2,2]=Gt; JA[2,3]=Gw; JA[2,4]=diff(G,C);
+JA[3,1]=Hs; JA[3,2]=Ht; JA[3,3]=Hw; JA[3,4]=diff(H,C);
+JA[4,1]=Ds; JA[4,2]=Dt; JA[4,3]=Dw; JA[4,4]=diff(D,C);
+matrix JC[4][4]; // delete C: columns s,t,w,A
+JC[1,1]=Fs; JC[1,2]=Ft; JC[1,3]=Fw; JC[1,4]=diff(F,A);
+JC[2,1]=Gs; JC[2,2]=Gt; JC[2,3]=Gw; JC[2,4]=diff(G,A);
+JC[3,1]=Hs; JC[3,2]=Ht; JC[3,3]=Hw; JC[3,4]=diff(H,A);
+JC[4,1]=Ds; JC[4,2]=Dt; JC[4,3]=Dw; JC[4,4]=diff(D,A);
+poly dA=det(JA); poly dC=det(JC);
+
+// Previously closed charts are excluded.  The distance equations already
+// force a,b,c,d nonzero.  8*a^3-1 is the separately closed singular
+// mass-solving chart.
+poly P=w*(s-1)-t; poly Q=t+w*(s+1);
+poly Delta=A*C*s*w*T*(aa-h)*P*Q*(8*aa-1);
+poly satEq=z*Delta-1;
+ideal Vertical=F,G,H,g1,g2,g3,g4,D,dA,dC,satEq;
+print("BEGIN_VERTICALITY_GATE");
+print("D_terms="+string(size(D)));
+print("dA_terms="+string(size(dA)));
+print("dC_terms="+string(size(dC)));
+print("generator_count="+string(size(Vertical)));
+ideal GV=std(Vertical);
+print("verticality_dimension="+string(dim(GV)));
+print("verticality_groebner_size="+string(size(GV)));
+if (dim(GV)==0) { print("verticality_vdim="+string(vdim(GV))); }
+print("END_VERTICALITY_GATE");
+quit;

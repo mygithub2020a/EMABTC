@@ -1,125 +1,77 @@
-name: Temporary Smale6 exact second-jet msolve
+name: Temporary Smale6 round7 determinant-derivative gates
 
 on:
   pull_request:
     branches: [master]
     paths:
-      - 'smale6_temp/**'
+      - 'smale6_round7/**'
       - '.github/workflows/smale6-temp-msolve.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-jobs:
-  tool-bundle:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - name: Download current msolve binary
-        run: |
-          set -euxo pipefail
-          curl -fL https://msolve.proj.lip6.fr/downloads/v0.10.1/msolve-0.10.1_linux_intel_x86.zip -o msolve.zip
-          unzip -l msolve.zip
-          sha256sum msolve.zip > msolve.zip.sha256
-      - uses: actions/upload-artifact@v4
-        with:
-          name: msolve-0.10.1-linux-intel
-          path: |
-            msolve.zip
-            msolve.zip.sha256
-          retention-days: 2
+concurrency:
+  group: smale6-round7-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
-  second-jet:
-    name: second jet p=${{ matrix.prime }} chart=${{ matrix.chart }}
+jobs:
+  rank-two-charts:
+    name: rank2 chart=${{ matrix.chart }} p=${{ matrix.prime }}
     runs-on: ubuntu-24.04
     timeout-minutes: 330
     strategy:
       fail-fast: false
       max-parallel: 6
       matrix:
-        prime: [61, 101]
-        chart: [s, t, w]
+        prime: [101]
+        chart: ['00','01','02','10','11','12','20','21','22']
     steps:
       - uses: actions/checkout@v4
-      - name: Prepare exact system and current solver
-        run: |
-          set -euxo pipefail
-          python -m pip install --quiet sympy
-          python smale6_temp/generate_secondjet_msolve.py --prime '${{ matrix.prime }}' --chart '${{ matrix.chart }}' --output system.ms
-          curl -fL https://msolve.proj.lip6.fr/downloads/v0.10.1/msolve-0.10.1_linux_intel_x86.zip -o msolve.zip
-          unzip -q msolve.zip -d solver
-          find solver -type f -maxdepth 3 -print
-          MSOLVE=$(find solver -type f -name msolve | head -1)
-          chmod +x "$MSOLVE"
-          echo "MSOLVE=$MSOLVE" >> "$GITHUB_ENV"
-          "$MSOLVE" -h | head -100 | tee msolve-help.txt
-      - name: Compute exact leading ideal and dimension
+      - name: Generate exact modular system and install msolve
         shell: bash
         run: |
-          set +e
-          /usr/bin/time -v timeout 315m "$MSOLVE" -t 4 -v 2 -g 1 -f system.ms -o result.ms > solver.stdout 2> solver.stderr
-          status=$?
-          echo "$status" > solver.status
-          cat solver.status
-          tail -n 300 solver.stdout || true
-          tail -n 300 solver.stderr || true
-          sed -n '1,300p' result.ms || true
-          exit 0
-      - name: Upload exact certificate
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: secondjet-msolve-${{ matrix.prime }}-${{ matrix.chart }}
-          path: |
-            system.ms
-            result.ms
-            solver.stdout
-            solver.stderr
-            solver.status
-            msolve-help.txt
-          retention-days: 2
-
-  char0-second-jet:
-    name: characteristic-zero second jet chart=${{ matrix.chart }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 330
-    strategy:
-      fail-fast: false
-      max-parallel: 3
-      matrix:
-        chart: [s, t, w]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Prepare characteristic-zero system
-        run: |
           set -euxo pipefail
-          python -m pip install --quiet sympy
-          python smale6_temp/generate_secondjet_msolve.py --prime 0 --chart '${{ matrix.chart }}' --output system.ms
+          ROW=${{ matrix.chart }}; ROW=${ROW:0:1}
+          COL=${{ matrix.chart }}; COL=${COL:1:1}
+          python smale6_round7/generate_fivebody_detderiv_sparse.py \
+            --prime '${{ matrix.prime }}' --row "$ROW" --col "$COL" \
+            --output system_${{ matrix.chart }}_${{ matrix.prime }}.in \
+            | tee system_${{ matrix.chart }}_${{ matrix.prime }}.generator.json
           curl -fL https://msolve.proj.lip6.fr/downloads/v0.10.1/msolve-0.10.1_linux_intel_x86.zip -o msolve.zip
           unzip -q msolve.zip -d solver
           MSOLVE=$(find solver -type f -name msolve | head -1)
           chmod +x "$MSOLVE"
           echo "MSOLVE=$MSOLVE" >> "$GITHUB_ENV"
-      - name: Compute characteristic-zero leading ideal
+          "$MSOLVE" -V | tee msolve-version.txt
+      - name: Compute determinant-derivative chart
         shell: bash
         run: |
           set +e
-          /usr/bin/time -v timeout 315m "$MSOLVE" -t 4 -v 2 -g 1 -f system.ms -o result.ms > solver.stdout 2> solver.stderr
+          ulimit -v 6800000
+          /usr/bin/time -v timeout 315m "$MSOLVE" \
+            -t 4 -v 2 -g 1 -l 44 -m 256 \
+            -f system_${{ matrix.chart }}_${{ matrix.prime }}.in \
+            -o result_${{ matrix.chart }}_${{ matrix.prime }}.out \
+            > solver_${{ matrix.chart }}_${{ matrix.prime }}.stdout \
+            2> solver_${{ matrix.chart }}_${{ matrix.prime }}.stderr
           status=$?
-          echo "$status" > solver.status
-          tail -n 300 solver.stdout || true
-          tail -n 300 solver.stderr || true
-          sed -n '1,300p' result.ms || true
+          echo "$status" > solver_${{ matrix.chart }}_${{ matrix.prime }}.status
+          tail -n 300 solver_${{ matrix.chart }}_${{ matrix.prime }}.stderr || true
+          sed -n '1,160p' result_${{ matrix.chart }}_${{ matrix.prime }}.out || true
           exit 0
-      - name: Upload characteristic-zero certificate
+      - name: Upload certificate
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: secondjet-msolve-char0-${{ matrix.chart }}
+          name: round7-rank2-${{ matrix.chart }}-${{ matrix.prime }}
           path: |
-            system.ms
-            result.ms
-            solver.stdout
-            solver.stderr
-            solver.status
-          retention-days: 2
+            msolve-version.txt
+            system_${{ matrix.chart }}_${{ matrix.prime }}.in
+            system_${{ matrix.chart }}_${{ matrix.prime }}.in.meta.json
+            system_${{ matrix.chart }}_${{ matrix.prime }}.generator.json
+            result_${{ matrix.chart }}_${{ matrix.prime }}.out
+            solver_${{ matrix.chart }}_${{ matrix.prime }}.stdout
+            solver_${{ matrix.chart }}_${{ matrix.prime }}.stderr
+            solver_${{ matrix.chart }}_${{ matrix.prime }}.status
+          retention-days: 7

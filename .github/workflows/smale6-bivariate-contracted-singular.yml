@@ -1,0 +1,59 @@
+name: Smale6 exact bivariate contracted gate
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'smale6_temp/fivebody_bivariate_contracted_template.sing'
+      - '.github/workflows/smale6-bivariate-contracted-singular.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: smale6-bivariate-contracted-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contracted-gate:
+    name: contracted gate p=${{ matrix.prime }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 230
+    strategy:
+      fail-fast: false
+      matrix:
+        prime: [5, 7, 11]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Singular
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y singular
+          Singular --version | tee singular-version.txt
+      - name: Run exact modular contracted-component test
+        shell: bash
+        run: |
+          sed 's/__CHAR__/${{ matrix.prime }}/g' \
+            smale6_temp/fivebody_bivariate_contracted_template.sing \
+            > contracted_${{ matrix.prime }}.sing
+          set +e
+          /usr/bin/time -v timeout 200m Singular -q contracted_${{ matrix.prime }}.sing \
+            > contracted_${{ matrix.prime }}.log 2> contracted_${{ matrix.prime }}.time
+          status=$?
+          echo "$status" > contracted_${{ matrix.prime }}.status
+          echo "status=$status"
+          tail -n 600 contracted_${{ matrix.prime }}.log || true
+          exit 0
+      - name: Upload exact certificate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smale6-bivariate-contracted-${{ matrix.prime }}
+          path: |
+            singular-version.txt
+            contracted_${{ matrix.prime }}.sing
+            contracted_${{ matrix.prime }}.log
+            contracted_${{ matrix.prime }}.time
+            contracted_${{ matrix.prime }}.status
+          retention-days: 7

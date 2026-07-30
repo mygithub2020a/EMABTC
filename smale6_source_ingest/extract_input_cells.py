@@ -56,7 +56,7 @@ class Parser:
             else: out.append(c)
         raise ValueError('unterminated string')
 
-SPECIAL={'\\[IndentingNewLine]':'\n','\\[NewLine]':'\n','\\[InvisibleSpace]':'','\\[Rule]':'->','\\[RuleDelayed]':':>','\\[Equal]':'==','\\[NotEqual]':'!=','\\[LessEqual]':'<=','\\[GreaterEqual]':'>=','\\[And]':'&&','\\[Or]':'||','\\[Function]':'&','\\[Times]':'*','\\[CenterDot]':'*'}
+SPECIAL={'\\[IndentingNewLine]':'\n','\\[NewLine]':'\n','\\[InvisibleSpace]':'','\\[Rule]':'->','\\[RuleDelayed]':':>','\\[Equal]':'==','\\[NotEqual]':'!=','\\[LessEqual]':'<=','\\[GreaterEqual]':'>=','\\[And]':'&&','\\[Or]':'||','\\[Function]':'&','\\[Times]':'*','\\[CenterDot]':'*','\\<':'','\\>':''}
 def clean(x):
     for a,b in SPECIAL.items(): x=x.replace(a,b)
     return x

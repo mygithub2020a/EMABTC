@@ -16,7 +16,7 @@ permissions:
 jobs:
   ingest:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - name: Download exact official Mathematica source
@@ -37,15 +37,19 @@ jobs:
           python3 smale6_source_ingest/inventory.py SingSeqCCver202303.nb source_inventory.json source_strings.txt
           python3 smale6_source_ingest/extract_input_cells.py SingSeqCCver202303.nb extracted_inputs
           python3 smale6_source_ingest/extract_fmx.py SingSeqCCver202303.nb FMX.wl diagrams_1_117.json
-          sha256sum extracted_inputs/input_03.wl FMX.wl diagrams_1_117.json | tee derived.sha256
+          sha256sum extracted_inputs/input_03.wl extracted_inputs/input_05.wl FMX.wl diagrams_1_117.json | tee derived.sha256
           cat source_inventory.json
           cat extracted_inputs/manifest.json
-      - name: Run source-exact Algorithm-II canary in Mathics
+      - name: Install Mathics
         shell: bash
         run: |
           set -euxo pipefail
           python3 -m pip install --disable-pip-version-check --quiet Mathics3
           mathics --version | tee mathics-version.txt
+      - name: Run source-exact Algorithm-II canary in Mathics
+        shell: bash
+        run: |
+          set -euxo pipefail
           cat > findorder_canary.wl <<'WL'
           n=6;
           allind=Range[n];
@@ -70,6 +74,34 @@ jobs:
           tail -n 400 findorder_canary.log || true
           grep -F '2048000' findorder_canary.log > /dev/null && echo STEP1_TYPE3_CANARY=PASS || echo STEP1_TYPE3_CANARY=FAIL
           grep -F 'matrix FMX[[21]] is impossible' findorder_canary.log > /dev/null && echo IMPOSSIBLE_CANARY=PASS || echo IMPOSSIBLE_CANARY=FAIL
+      - name: Run source-exact mass-relation canary 107
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat > massrel107_canary.wl <<'WL'
+          n=6;
+          allind=Range[n];
+          pm=Permutations[Range[n]];
+          zpart[{z_,w_}]:=z;
+          wpart[{z_,w_}]:=w;
+          componentsZ[x_]:=(mz=zpart[x]; c=MatrixPower[mz,n-1]; out={}; rem=Range[n]; While[Length[rem]>0, cc=Union[{First[rem]},Select[rem,c[[First[rem],#]]>0&]]; If[Length[cc]>1,out=Append[out,cc]]; rem=Complement[rem,cc]]; out);
+          componentsW[x_]:=(mw=wpart[x]; c=MatrixPower[mw,n-1]; out={}; rem=Range[n]; While[Length[rem]>0, cc=Union[{First[rem]},Select[rem,c[[First[rem],#]]>0&]]; If[Length[cc]>1,out=Append[out,cc]]; rem=Complement[rem,cc]]; out);
+          Get["FMX.wl"];
+          Get["extracted_inputs/input_03.wl"];
+          Get["extracted_inputs/input_05.wl"];
+          Print["BEGIN_MASSREL107"];
+          FindOrder[107];
+          FindMassRel1[];
+          Print["END_MASSREL107"];
+          Quit[];
+          WL
+          set +e
+          /usr/bin/time -v timeout 90m mathics < massrel107_canary.wl > massrel107_canary.log 2> massrel107_canary.time
+          status=$?
+          echo "$status" > massrel107_canary.status
+          set -e
+          tail -n 500 massrel107_canary.log || true
+          grep -E 'm4.*m1.*m5.*m2.*m3.*m6|m2.*m3.*m6.*m4.*m1.*m5' massrel107_canary.log > /dev/null && echo MASSREL107_CANARY=PASS || echo MASSREL107_CANARY=FAIL
       - name: Upload source certificate
         if: always()
         uses: actions/upload-artifact@v4
@@ -87,10 +119,15 @@ jobs:
             FMX.wl
             extracted_inputs/manifest.json
             extracted_inputs/input_03.wl
+            extracted_inputs/input_05.wl
             derived.sha256
             mathics-version.txt
             findorder_canary.wl
             findorder_canary.log
             findorder_canary.time
             findorder_canary.status
+            massrel107_canary.wl
+            massrel107_canary.log
+            massrel107_canary.time
+            massrel107_canary.status
           retention-days: 7

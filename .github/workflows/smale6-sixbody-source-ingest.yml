@@ -63,7 +63,7 @@ jobs:
           Quit[];
           WL
           set +e
-          /usr/bin/time -v timeout 70m mathics --script findorder_canary.wl > findorder_canary.log 2> findorder_canary.time
+          /usr/bin/time -v timeout 70m mathics < findorder_canary.wl > findorder_canary.log 2> findorder_canary.time
           status=$?
           echo "$status" > findorder_canary.status
           set -e

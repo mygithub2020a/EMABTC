@@ -1,0 +1,60 @@
+name: Temporary Smale6 factor raw Bertini Q
+
+on:
+  push:
+    branches:
+      - agent/smale6-bertini-q-factor-20260731
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/smale6-bertini-q-factor.yml'
+      - 'smale6_bertini/**'
+
+permissions:
+  contents: read
+
+jobs:
+  factor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install exact algebra tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y singular python3-sympy
+          Singular --version | tee singular-version.txt
+          python3 - <<'PY'
+          import sympy
+          print(sympy.__version__)
+          PY
+      - name: Reconstruct frozen inputs and raw resultant
+        run: |
+          python3 smale6_bertini/rebuild_factor_rawQ.py | tee generator.log
+          sed -i 's/factorize(Q,1)/factorize(Q)/' factor_rawQ.sing
+          sha256sum factor_rawQ.sing rawQ_meta.json | tee inputs.sha256
+          wc -c factor_rawQ.sing
+      - name: Factor raw resultant over F_127
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v timeout 165m Singular -q factor_rawQ.sing > factor.log 2> factor.time
+          status=$?
+          echo "$status" | tee factor.status
+          tail -n 1000 factor.log || true
+          exit 0
+      - name: Upload exact audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smale6-rawQ-factor-p127-b1
+          path: |
+            factor_rawQ.sing
+            rawQ_meta.json
+            factor.log
+            factor.time
+            factor.status
+            generator.log
+            inputs.sha256
+            singular-version.txt
+          retention-days: 7

@@ -31,6 +31,7 @@ jobs:
       - name: Reconstruct frozen inputs and raw resultant
         run: |
           python3 smale6_bertini/rebuild_factor_rawQ.py | tee generator.log
+          sed -i 's/factorize(Q,1)/factorize(Q)/' factor_rawQ.sing
           sha256sum factor_rawQ.sing rawQ_meta.json | tee inputs.sha256
           wc -c factor_rawQ.sing
       - name: Factor raw resultant over F_127

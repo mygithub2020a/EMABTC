@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - agent/smale6-bertini-q-factor-20260731
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/smale6-bertini-q-factor.yml'
+      - 'smale6_bertini/**'
 
 permissions:
   contents: read
